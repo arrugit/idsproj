@@ -1,0 +1,151 @@
+# credit_card_fraud_analysis.py
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import accuracy_score, f1_score, classification_report
+import pickle
+import warnings
+warnings.filterwarnings('ignore')
+
+# Load dataset
+#url = 'C:\Users\Administrator\Desktop\ids_model/fraudTrain.csv' 
+df = pd.read_csv("fraudTrain.csv")
+print("Dataset loaded successfully. Shape:", df.shape)
+
+# 1. Exploratory Data Analysis (EDA)
+eda_results = {}
+
+# Summary statistics
+eda_results['summary_stats'] = df.describe()
+print("\nSummary Statistics:\n", eda_results['summary_stats'])
+
+# Data types and unique values
+eda_results['data_types'] = df.dtypes
+eda_results['unique_values'] = df.nunique()
+print("\nData Types:\n", eda_results['data_types'])
+print("\nUnique Values:\n", eda_results['unique_values'])
+
+# Missing value analysis
+eda_results['missing_values'] = df.isnull().sum()
+print("\nMissing Values:\n", eda_results['missing_values'])
+
+# Target distribution (is_fraud)
+plt.figure(figsize=(6, 4))
+sns.countplot(x='is_fraud', data=df)
+plt.title('Fraud vs Non-Fraud Transactions')
+plt.savefig('fraud_distribution.png')
+plt.close()
+
+# Pie chart for fraud percentage
+plt.figure(figsize=(6, 6))
+df['is_fraud'].value_counts().plot.pie(autopct='%1.1f%%', labels=['Non-Fraud', 'Fraud'])
+plt.title('Percentage of Fraud Transactions')
+plt.savefig('fraud_pie.png')
+plt.close()
+
+# Correlation analysis (numerical features only)
+numerical_cols = df.select_dtypes(include=np.number).columns
+plt.figure(figsize=(10, 8))
+sns.heatmap(df[numerical_cols].corr(), cmap='viridis', annot=False)
+plt.title('Correlation Heatmap')
+plt.savefig('correlation_heatmap.png')
+plt.close()
+
+# Distribution of transaction amount
+plt.figure(figsize=(8, 5))
+sns.histplot(df['amt'], bins=50, kde=True)
+plt.title('Distribution of Transaction Amount')
+plt.savefig('amount_distribution.png')
+plt.close()
+
+# Box plot for transaction amount by fraud status
+plt.figure(figsize=(8, 5))
+sns.boxplot(x='is_fraud', y='amt', data=df)
+plt.title('Transaction Amount by Fraud Status')
+plt.savefig('amount_boxplot.png')
+plt.close()
+
+# Top 5 merchant categories by fraud count
+top_categories = df[df['is_fraud'] == 1]['category'].value_counts().head(5)
+plt.figure(figsize=(8, 5))
+sns.barplot(x=top_categories.values, y=top_categories.index)
+plt.title('Top 5 Merchant Categories for Fraud')
+plt.savefig('top_fraud_categories.png')
+plt.close()
+
+# Transaction hour analysis
+df['trans_date_trans_time'] = pd.to_datetime(df['trans_date_trans_time'])
+df['hour'] = df['trans_date_trans_time'].dt.hour
+plt.figure(figsize=(10, 5))
+sns.histplot(data=df, x='hour', hue='is_fraud', multiple='stack')
+plt.title('Transaction Hour Distribution by Fraud Status')
+plt.savefig('hour_distribution.png')
+plt.close()
+
+# Feature correlations with target
+correlations = df[numerical_cols].corr()['is_fraud'].sort_values(ascending=False)
+eda_results['feature_correlations'] = correlations
+print("\nFeature Correlations with is_fraud:\n", correlations)
+
+# Grouped aggregations by fraud status
+eda_results['group_by_fraud'] = df.groupby('is_fraud')[['amt', 'hour']].mean()
+print("\nGroup by Fraud Status:\n", eda_results['group_by_fraud'])
+
+# Violin plot for transaction amount
+plt.figure(figsize=(8, 5))
+sns.violinplot(x='is_fraud', y='amt', data=df)
+plt.title('Violin Plot of Transaction Amount by Fraud Status')
+plt.savefig('amount_violin.png')
+plt.close()
+
+# 2. Data Preprocessing
+# Handle missing values
+df = df.dropna()
+
+# Feature selection (simplified for model)
+features = ['amt', 'hour', 'category']
+X = df[features]
+y = df['is_fraud']
+
+# Encode categorical variable (category)
+X = pd.get_dummies(X, columns=['category'], drop_first=True)
+
+# Scale numerical features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Split into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42, stratify=y)
+print("\nData preprocessing completed. Shapes:")
+print(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
+
+# Save scaler and feature names
+with open('scaler.pkl', 'wb') as f:
+    pickle.dump(scaler, f)
+with open('feature_names.pkl', 'wb') as f:
+    pickle.dump(X.columns.tolist(), f)
+
+# 3. Model Training (Gradient Boosting Classifier)
+model = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, random_state=42)
+model.fit(X_train, y_train)
+
+# Evaluate model
+y_pred = model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+report = classification_report(y_test, y_pred)
+print(f"\nModel Evaluation:\nAccuracy: {accuracy:.4f}\nF1-Score: {f1:.4f}\nClassification Report:\n{report}")
+
+# Save model
+with open('model.pkl', 'wb') as f:
+    pickle.dump(model, f)
+
+# Save preprocessed data for reference
+with open('preprocessed_data.pkl', 'wb') as f:
+    pickle.dump((X_train, X_test, y_train, y_test, X.columns), f)
+
+print("\nEDA, preprocessing, and model training completed successfully.")
